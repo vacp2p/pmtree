@@ -62,6 +62,22 @@ impl Database for MySled {
 
         Ok(())
     }
+
+    fn close(&mut self) -> PmtreeResult<()> {
+        self.0.close().map_err(|_| {
+            PmtreeErrorKind::DatabaseError(DatabaseErrorKind::CustomError(
+                String::from("Error closing database"),
+            ))
+        })
+    }
+
+    fn flush(&mut self) -> PmtreeResult<()> {
+        self.0.flush().map_err(|_| {
+            PmtreeErrorKind::DatabaseError(DatabaseErrorKind::CustomError(
+                String::from("Error flushing database"),
+            ))
+        })
+    }
 }
 
 impl Hasher for MyKeccak {
