@@ -28,4 +28,7 @@ pub trait Database {
 
     /// Closes the db connection
     fn close(&mut self) -> PmtreeResult<()>;
+
+    /// Flushes writes to the db
+    fn flush(&mut self) -> PmtreeResult<()>;
 }
