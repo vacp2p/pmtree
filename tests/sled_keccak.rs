@@ -1,5 +1,5 @@
 use hex_literal::hex;
-use pmtree::*;
+use vacp2p_pmtree::*;
 use std::collections::HashMap;
 use std::fs;
 use tiny_keccak::{Hasher as _, Keccak};
@@ -59,6 +59,12 @@ impl Database for MySled {
         }
 
         self.0.apply_batch(batch).unwrap();
+
+        Ok(())
+    }
+
+    fn close(&mut self) -> PmtreeResult<()> {
+        self.0.flush().unwrap();
 
         Ok(())
     }

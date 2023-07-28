@@ -27,7 +27,7 @@ where
     D: Database,
     H: Hasher,
 {
-    db: D,
+    pub db: D,
     depth: usize,
     next_index: usize,
     cache: Vec<H::Fr>,
@@ -89,15 +89,22 @@ where
         // Load existing db instance
         let db = D::load(db_config)?;
 
-        // Load root
-        let root = H::deserialize(db.get(Key(0, 0).into())?.unwrap());
+        // Load root 
+        let root = match db.get(Key(0, 0).into())? {
+            Some(root) => H::deserialize(root),
+            None => H::default_leaf(),
+        };
 
         // Load depth & next_index values from db
-        let depth = db.get(DEPTH_KEY)?.unwrap().try_into().unwrap();
-        let depth = usize::from_be_bytes(depth);
+        let depth = match db.get(DEPTH_KEY)? {
+            Some(depth) => usize::from_be_bytes(depth.try_into().unwrap()),
+            None => 20
+        };
 
-        let next_index = db.get(NEXT_INDEX_KEY)?.unwrap().try_into().unwrap();
-        let next_index = usize::from_be_bytes(next_index);
+        let next_index = match db.get(NEXT_INDEX_KEY)? {
+            Some(next_index) => usize::from_be_bytes(next_index.try_into().unwrap()),
+            None => 0,
+        };
 
         // Load cache vec
         let mut cache = vec![H::default_leaf(); depth + 1];
@@ -113,6 +120,11 @@ where
             cache,
             root,
         })
+    }
+
+    /// Closes the db connection
+    pub fn close(&mut self) -> PmtreeResult<()> {
+        self.db.close()
     }
 
     /// Sets a leaf at the specified tree index
