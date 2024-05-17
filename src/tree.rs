@@ -21,6 +21,12 @@ impl From<Key> for DBKey {
     }
 }
 
+impl Key {
+    pub fn new(depth: usize, index: usize) -> Self {
+        Key(depth, index)
+    }
+}
+
 /// The Merkle Tree structure
 pub struct MerkleTree<D, H>
 where
@@ -89,7 +95,7 @@ where
         // Load existing db instance
         let db = D::load(db_config)?;
 
-        // Load root 
+        // Load root
         let root = match db.get(Key(0, 0).into())? {
             Some(root) => H::deserialize(root),
             None => H::default_leaf(),
@@ -98,7 +104,7 @@ where
         // Load depth & next_index values from db
         let depth = match db.get(DEPTH_KEY)? {
             Some(depth) => usize::from_be_bytes(depth.try_into().unwrap()),
-            None => 20
+            None => 20,
         };
 
         let next_index = match db.get(NEXT_INDEX_KEY)? {
