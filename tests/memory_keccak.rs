@@ -1,10 +1,10 @@
 use hex_literal::hex;
-use vacp2p_pmtree::*;
 use std::collections::HashMap;
 use tiny_keccak::{Hasher as _, Keccak};
+use vacp2p_pmtree::*;
 
 struct MemoryDB(HashMap<DBKey, Value>);
-struct MyKeccak(Keccak);
+struct MyKeccak;
 
 #[derive(Default)]
 struct MemoryDBConfig;
@@ -33,7 +33,7 @@ impl Database for MemoryDB {
     }
 
     fn put_batch(&mut self, subtree: HashMap<DBKey, Value>) -> PmtreeResult<()> {
-        self.0.extend(subtree.into_iter());
+        self.0.extend(subtree);
 
         Ok(())
     }
