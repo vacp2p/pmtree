@@ -1,10 +1,10 @@
 use hex_literal::hex;
-use vacp2p_pmtree::*;
 use std::collections::HashMap;
 use std::fs;
 use tiny_keccak::{Hasher as _, Keccak};
+use vacp2p_pmtree::*;
 
-struct MyKeccak(Keccak);
+struct MyKeccak;
 struct MySled(sled::Db);
 
 #[derive(Default)]

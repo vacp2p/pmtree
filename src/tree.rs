@@ -4,6 +4,9 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+#[cfg(feature = "parallel")]
+use rayon;
+
 // db[DEPTH_KEY] = depth
 const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
 
@@ -240,11 +243,7 @@ where
 
         let subtree = Arc::new(RwLock::new(subtree));
 
-        let root_val = rayon::ThreadPoolBuilder::new()
-            .num_threads(rayon::current_num_threads())
-            .build()
-            .unwrap()
-            .install(|| Self::batch_recalculate(root_key, Arc::clone(&subtree), self.depth));
+        let root_val = Self::batch_recalculate(root_key, Arc::clone(&subtree), self.depth);
 
         let subtree = RwLock::into_inner(Arc::try_unwrap(subtree).unwrap()).unwrap();
 
@@ -320,9 +319,16 @@ where
             return *subtree.read().unwrap().get(&key).unwrap();
         }
 
+        #[cfg(feature = "parallel")]
         let (left, right) = rayon::join(
             || Self::batch_recalculate(left_child, Arc::clone(&subtree), depth),
             || Self::batch_recalculate(right_child, Arc::clone(&subtree), depth),
+        );
+
+        #[cfg(not(feature = "parallel"))]
+        let (left, right) = (
+            Self::batch_recalculate(left_child, Arc::clone(&subtree), depth),
+            Self::batch_recalculate(right_child, Arc::clone(&subtree), depth),
         );
 
         let result = H::hash(&[left, right]);

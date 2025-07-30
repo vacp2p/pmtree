@@ -1,15 +1,19 @@
 [package]
 name = "vacp2p_pmtree"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Persistent Merkle Tree in Rust"
 
 [dev-dependencies]
-hex-literal = "=0.3.4"
+hex-literal = "0.3.4"
 tiny-keccak = { version = "=2.0.2", features = ["keccak"] }
 sled = "=0.34.7"
-ark-serialize = "=0.3.0"
+ark-serialize = { version = "0.5.0", default-features = false }
 
 [dependencies]
-rayon = { version = "=1.7.0", optional =  false }
+rayon = { version = "1.10.0", optional = true }
+
+[features]
+default = []
+parallel = ["rayon", "ark-serialize/parallel"]
