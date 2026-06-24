@@ -1,6 +1,6 @@
-use crate::*;
-
 use std::collections::HashMap;
+
+use crate::*;
 
 /// Trait that must be implemented for a Database
 pub trait Database {

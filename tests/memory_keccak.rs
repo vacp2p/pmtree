@@ -1,5 +1,6 @@
-use hex_literal::hex;
 use std::collections::HashMap;
+
+use hex_literal::hex;
 use tiny_keccak::{Hasher as _, Keccak};
 use vacp2p_pmtree::*;
 
@@ -46,24 +47,27 @@ impl Database for MemoryDB {
 impl Hasher for MyKeccak {
     type Fr = [u8; 32];
 
+    fn serialize(value: Self::Fr) -> PmtreeResult<Value> {
+        Ok(value.to_vec())
+    }
+
+    fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr> {
+        bytes
+            .try_into()
+            .map_err(|err: std::array::TryFromSliceError| {
+                PmtreeErrorKind::CustomError(err.to_string())
+            })
+    }
+
     fn default_leaf() -> Self::Fr {
         [0; 32]
     }
 
-    fn serialize(value: Self::Fr) -> Value {
-        value.to_vec()
-    }
-
-    fn deserialize(value: Value) -> Self::Fr {
-        value.try_into().unwrap()
-    }
-
-    fn hash(input: &[Self::Fr]) -> Self::Fr {
+    fn hash_pair(left: Self::Fr, right: Self::Fr) -> Self::Fr {
         let mut output = [0; 32];
         let mut hasher = Keccak::v256();
-        for element in input {
-            hasher.update(element);
-        }
+        hasher.update(&left);
+        hasher.update(&right);
         hasher.finalize(&mut output);
         output
     }

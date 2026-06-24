@@ -1,11 +1,13 @@
-use crate::*;
-
-use std::cmp::{max, min};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::{
+    cmp::{max, min},
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 #[cfg(feature = "parallel")]
 use rayon;
+
+use crate::*;
 
 // db[DEPTH_KEY] = depth
 const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
@@ -76,10 +78,10 @@ where
 
         // Initialize one branch of the `Merkle Tree` from bottom to top
         cache[depth] = H::default_leaf();
-        db.put(Key(depth, 0).into(), H::serialize(cache[depth]))?;
+        db.put(Key(depth, 0).into(), H::serialize(cache[depth])?)?;
         for i in (0..depth).rev() {
-            cache[i] = H::hash(&[cache[i + 1], cache[i + 1]]);
-            db.put(Key(i, 0).into(), H::serialize(cache[i]))?;
+            cache[i] = H::hash_pair(cache[i + 1], cache[i + 1]);
+            db.put(Key(i, 0).into(), H::serialize(cache[i])?)?;
         }
 
         let root = cache[0];
@@ -100,7 +102,7 @@ where
 
         // Load root
         let root = match db.get(Key(0, 0).into())? {
-            Some(root) => H::deserialize(root),
+            Some(root) => H::deserialize(&root)?,
             None => H::default_leaf(),
         };
 
@@ -119,7 +121,7 @@ where
         let mut cache = vec![H::default_leaf(); depth + 1];
         cache[depth] = H::default_leaf();
         for i in (0..depth).rev() {
-            cache[i] = H::hash(&[cache[i + 1], cache[i + 1]]);
+            cache[i] = H::hash_pair(cache[i + 1], cache[i + 1]);
         }
 
         Ok(Self {
@@ -143,7 +145,7 @@ where
         }
 
         self.db
-            .put(Key(self.depth, key).into(), H::serialize(leaf))?;
+            .put(Key(self.depth, key).into(), H::serialize(leaf)?)?;
         self.recalculate_from(key)?;
 
         // Update next_index in memory
@@ -165,7 +167,7 @@ where
             let value = self.hash_couple(depth, i)?;
             i >>= 1;
             depth -= 1;
-            self.db.put(Key(depth, i).into(), H::serialize(value))?;
+            self.db.put(Key(depth, i).into(), H::serialize(value)?)?;
 
             if depth == 0 {
                 self.root = value;
@@ -179,18 +181,18 @@ where
     // Hashes the correct couple for the key
     fn hash_couple(&self, depth: usize, key: usize) -> PmtreeResult<H::Fr> {
         let b = key & !1;
-        Ok(H::hash(&[
+        Ok(H::hash_pair(
             self.get_elem(Key(depth, b))?,
             self.get_elem(Key(depth, b + 1))?,
-        ]))
+        ))
     }
 
     // Returns elem by the key
     pub fn get_elem(&self, key: Key) -> PmtreeResult<H::Fr> {
-        let res = self
-            .db
-            .get(key.into())?
-            .map_or(self.cache[key.0], |value| H::deserialize(value));
+        let res = match self.db.get(key.into())? {
+            Some(value) => H::deserialize(&value)?,
+            None => self.cache[key.0],
+        };
 
         Ok(res)
     }
@@ -247,12 +249,11 @@ where
 
         let subtree = RwLock::into_inner(Arc::try_unwrap(subtree).unwrap()).unwrap();
 
-        self.db.put_batch(
-            subtree
-                .into_iter()
-                .map(|(key, value)| (key.into(), H::serialize(value)))
-                .collect(),
-        )?;
+        let batch = subtree
+            .into_iter()
+            .map(|(key, value)| Ok((key.into(), H::serialize(value)?)))
+            .collect::<PmtreeResult<HashMap<_, _>>>()?;
+        self.db.put_batch(batch)?;
 
         // Update next_index value in db
         if end > self.next_index {
@@ -331,7 +332,7 @@ where
             Self::batch_recalculate(right_child, Arc::clone(&subtree), depth),
         );
 
-        let result = H::hash(&[left, right]);
+        let result = H::hash_pair(left, right);
 
         subtree.write().unwrap().insert(key, result);
 
@@ -404,9 +405,9 @@ impl<H: Hasher> MerkleProof<H> {
         let mut acc = *leaf;
         for w in self.0.iter() {
             if w.1 == 0 {
-                acc = H::hash(&[acc, w.0]);
+                acc = H::hash_pair(acc, w.0);
             } else {
-                acc = H::hash(&[w.0, acc]);
+                acc = H::hash_pair(w.0, acc);
             }
         }
 
