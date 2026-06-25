@@ -7,10 +7,10 @@ pub trait Hasher {
     /// Native type for the hash function.
     type Fr: Copy + Eq + Default + Sync + Send + Debug;
 
-    /// Serializes `Fr` into its stored byte representation.
+    /// Serializes an `Fr` into its stored [`Value`].
     fn serialize(value: Self::Fr) -> PmtreeResult<Value>;
 
-    /// Deserializes `Fr` from its stored byte representation. Fails on malformed bytes.
+    /// Deserializes an `Fr` from its stored bytes.
     fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr>;
 
     /// Outputs the default leaf (`Fr::default()`).

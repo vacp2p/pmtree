@@ -18,9 +18,7 @@ impl Database for MySled {
     fn new(db_config: SledConfig) -> PmtreeResult<Self> {
         let db = sled::open(db_config.path).unwrap();
         if db.was_recovered() {
-            return Err(PmtreeErrorKind::DatabaseError(
-                DatabaseErrorKind::DatabaseExists,
-            ));
+            return Err(PmtreeError::Database("Database already exists".to_string()));
         }
 
         Ok(MySled(db))
@@ -31,9 +29,7 @@ impl Database for MySled {
 
         if !db.was_recovered() {
             fs::remove_dir_all(&db_config.path).expect("Error removing db");
-            return Err(PmtreeErrorKind::DatabaseError(
-                DatabaseErrorKind::CannotLoadDatabase,
-            ));
+            return Err(PmtreeError::Database("Cannot load database".to_string()));
         }
 
         Ok(MySled(db))
@@ -78,11 +74,7 @@ impl Hasher for MyKeccak {
     }
 
     fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr> {
-        bytes
-            .try_into()
-            .map_err(|err: std::array::TryFromSliceError| {
-                PmtreeErrorKind::CustomError(err.to_string())
-            })
+        Ok(bytes.try_into()?)
     }
 
     fn default_leaf() -> Self::Fr {
@@ -202,6 +194,65 @@ fn set_range() -> PmtreeResult<()> {
     );
 
     fs::remove_dir_all("abacabasab").expect("Error removing db");
+
+    Ok(())
+}
+
+#[test]
+fn batch_set_matches_individual_sets() -> PmtreeResult<()> {
+    let leaves = [
+        hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+    ];
+
+    // Reference: set the scattered indices one at a time.
+    let mut reference = MerkleTree::<MySled, MyKeccak>::new(
+        2,
+        SledConfig {
+            path: String::from("batch_set_reference"),
+        },
+    )?;
+    reference.set(0, leaves[0])?;
+    reference.set(2, leaves[1])?;
+    reference.set(3, leaves[2])?;
+
+    // Same leaves committed in a single scattered batch.
+    let mut batched = MerkleTree::<MySled, MyKeccak>::new(
+        2,
+        SledConfig {
+            path: String::from("batch_set_batched"),
+        },
+    )?;
+    batched.batch_set(&[(0, leaves[0]), (2, leaves[1]), (3, leaves[2])])?;
+
+    assert_eq!(reference.root(), batched.root());
+    assert_eq!(reference.leaves_set(), batched.leaves_set());
+    for index in 0..4 {
+        assert_eq!(reference.get(index)?, batched.get(index)?, "leaf {index}");
+    }
+
+    fs::remove_dir_all("batch_set_reference").expect("Error removing db");
+    fs::remove_dir_all("batch_set_batched").expect("Error removing db");
+
+    Ok(())
+}
+
+#[test]
+fn batch_set_empty_is_noop() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MySled, MyKeccak>::new(
+        2,
+        SledConfig {
+            path: String::from("batch_set_empty"),
+        },
+    )?;
+
+    let root_before = mt.root();
+    mt.batch_set(&[])?;
+    assert_eq!(mt.root(), root_before);
+    assert_eq!(mt.leaves_set(), 0);
+
+    fs::remove_dir_all("batch_set_empty").expect("Error removing db");
 
     Ok(())
 }

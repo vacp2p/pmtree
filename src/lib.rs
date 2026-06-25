@@ -1,66 +1,60 @@
 //! # pmtree
 //! Persistent Merkle Tree in Rust
 //!
-//! ## How it stored
-//! { (usize::MAX - 1) : depth }
-//! { (usize::MAX)     : next_index}
-//! { Position (tuple - (depth, index), converted to DBKey) : Value}
+//! ## How it is stored
+//! - `u64::MAX - 1` → `depth`
+//! - `u64::MAX` → `next_index`
+//! - a node position `(depth, index)` (converted to a [`DBKey`]) → its [`Value`]
 
 pub mod database;
 pub mod hasher;
 pub mod tree;
 
-use std::fmt::{Debug, Display};
-
 pub use database::*;
 pub use hasher::*;
 pub use tree::MerkleTree;
 
-/// Denotes keys in a database
+/// Denotes keys in a [`Database`].
 pub type DBKey = [u8; 8];
 
-/// Denotes values in a database
+/// Denotes values in a [`Database`].
 pub type Value = Vec<u8>;
 
-/// Denotes pmtree Merkle tree errors
-#[derive(Debug)]
-pub enum TreeErrorKind {
-    MerkleTreeIsFull,
-    InvalidKey,
+/// Errors returned by pmtree operations.
+#[derive(Debug, thiserror::Error)]
+pub enum PmtreeError {
+    /// The tree has no free leaves left.
+    #[error("Merkle tree is full")]
+    TreeIsFull,
+    /// The index is out of bounds, or the leaf at it is not set.
+    #[error("Index out of bounds")]
     IndexOutOfBounds,
-    CustomError(String),
+    /// The requested tree depth exceeds the supported maximum.
+    #[error("Tree depth {0} exceeds the supported maximum")]
+    DepthTooLarge(usize),
+    /// The stored tree is missing required data or is otherwise inconsistent.
+    #[error("Corrupted tree storage")]
+    Corrupted,
+    /// A stored value could not be parsed back.
+    #[error("Malformed stored value: {0}")]
+    Malformed(#[from] std::array::TryFromSliceError),
+    /// A recompute lock was poisoned by a panicking worker thread.
+    #[error("Recompute lock poisoned")]
+    LockPoisoned,
+    /// An error surfaced by a [`Database`] implementation.
+    #[error("Database error: {0}")]
+    Database(String),
+    /// An error surfaced by a [`Hasher`] implementation.
+    #[error("Hasher error: {0}")]
+    Hasher(String),
 }
 
-/// Denotes pmtree database errors
-#[derive(Debug)]
-pub enum DatabaseErrorKind {
-    CannotLoadDatabase,
-    DatabaseExists,
-    CustomError(String),
-}
-
-/// Denotes pmtree errors
-#[derive(Debug)]
-pub enum PmtreeErrorKind {
-    /// Error in database
-    DatabaseError(DatabaseErrorKind),
-    /// Error in tree
-    TreeError(TreeErrorKind),
-    /// Custom error
-    CustomError(String),
-}
-
-impl Display for PmtreeErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            PmtreeErrorKind::DatabaseError(e) => write!(f, "Database error: {e:?}"),
-            PmtreeErrorKind::TreeError(e) => write!(f, "Tree error: {e:?}"),
-            PmtreeErrorKind::CustomError(e) => write!(f, "Custom error: {e:?}"),
-        }
+// `PoisonError<T>` is generic so can't use `#[from]` by thiserror.
+impl<T> From<std::sync::PoisonError<T>> for PmtreeError {
+    fn from(_: std::sync::PoisonError<T>) -> Self {
+        PmtreeError::LockPoisoned
     }
 }
 
-impl std::error::Error for PmtreeErrorKind {}
-
-/// Custom `Result` type with custom `Error` type
-pub type PmtreeResult<T> = std::result::Result<T, PmtreeErrorKind>;
+/// Custom [`Result`] type carrying the crate's [`PmtreeError`].
+pub type PmtreeResult<T> = std::result::Result<T, PmtreeError>;

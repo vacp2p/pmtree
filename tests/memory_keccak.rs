@@ -18,9 +18,7 @@ impl Database for MemoryDB {
     }
 
     fn load(_db_config: MemoryDBConfig) -> PmtreeResult<Self> {
-        Err(PmtreeErrorKind::DatabaseError(
-            DatabaseErrorKind::CannotLoadDatabase,
-        ))
+        Err(PmtreeError::Database("Cannot load database".to_string()))
     }
 
     fn get(&self, key: DBKey) -> PmtreeResult<Option<Value>> {
@@ -52,11 +50,7 @@ impl Hasher for MyKeccak {
     }
 
     fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr> {
-        bytes
-            .try_into()
-            .map_err(|err: std::array::TryFromSliceError| {
-                PmtreeErrorKind::CustomError(err.to_string())
-            })
+        Ok(bytes.try_into()?)
     }
 
     fn default_leaf() -> Self::Fr {
@@ -156,5 +150,42 @@ fn set_range() -> PmtreeResult<()> {
         hex!("1e9f6c8d3fd5b7ae3a29792adb094c6d4cc6149d0c81c8c8e57cf06c161a92b8")
     );
 
+    Ok(())
+}
+
+#[test]
+fn batch_set_matches_individual_sets() -> PmtreeResult<()> {
+    let leaves = [
+        hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+    ];
+
+    // Reference: set the scattered indices one at a time.
+    let mut reference = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    reference.set(0, leaves[0])?;
+    reference.set(2, leaves[1])?;
+    reference.set(3, leaves[2])?;
+
+    // Same leaves committed in a single scattered batch.
+    let mut batched = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    batched.batch_set(&[(0, leaves[0]), (2, leaves[1]), (3, leaves[2])])?;
+
+    assert_eq!(reference.root(), batched.root());
+    assert_eq!(reference.leaves_set(), batched.leaves_set());
+    for index in 0..4 {
+        assert_eq!(reference.get(index)?, batched.get(index)?, "leaf {index}");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn batch_set_empty_is_noop() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    let root_before = mt.root();
+    mt.batch_set(&[])?;
+    assert_eq!(mt.root(), root_before);
+    assert_eq!(mt.leaves_set(), 0);
     Ok(())
 }
