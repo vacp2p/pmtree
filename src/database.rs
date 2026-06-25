@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{DBKey, PmtreeResult, Value};
 
-/// Trait that must be implemented for a database backend.
+/// Storage backend that persists the [`MerkleTree`](crate::MerkleTree)'s nodes.
+///
+/// Each tree is parameterized over a `Database`; it is the durable key/value store
+/// holding every serialized node plus the tree's depth and next index.
 pub trait Database {
-    /// Configuration for the database; its `Default` backs [`MerkleTree::default`].
+    /// Configuration for the database; its `Default` backs [`MerkleTree::default`](crate::MerkleTree::default).
     type Config: Default;
 
     /// Creates a new database instance.

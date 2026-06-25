@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::*;
+use crate::{PmtreeResult, Value};
 
 /// Trait that must be implemented for the hash function.
 pub trait Hasher {

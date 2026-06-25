@@ -1,13 +1,14 @@
 use std::{
     cmp::{max, min},
     collections::{hash_map::Entry, HashMap},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
+use parking_lot::RwLock;
 #[cfg(feature = "parallel")]
 use rayon;
 
-use crate::*;
+use crate::{DBKey, Database, Hasher, PmtreeError, PmtreeResult, Value};
 
 // db[DEPTH_KEY] = depth
 const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
@@ -15,8 +16,8 @@ const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
 // db[NEXT_INDEX_KEY] = next_index;
 const NEXT_INDEX_KEY: DBKey = u64::MAX.to_be_bytes();
 
-// The Cantor pairing in `From<Key>` is computed in u64; it stays within u64 only while the largest
-// node key `s = depth + (2^depth - 1)` keeps `s * (s + 1)` below u64::MAX (which is true for `depth <= 31`).
+/// `[From<Key>` encodes `(depth, index)` into a `u64` using Cantor pairing `(s * (s + 1)) / 2 + index`.
+/// The formula grows quadratically with `s = depth + index`, so depth is capped at 31 to avoid overflow.
 const MAX_DEPTH: usize = 31;
 
 // Denotes keys (depth, index) in Merkle Tree. Can be converted to DBKey
@@ -250,15 +251,8 @@ where
     }
 
     /// Sets `leaves` contiguously from `start` via [`MerkleTree::batch_insert`].
-    pub fn set_range<I: IntoIterator<Item = H::Fr>>(
-        &mut self,
-        start: usize,
-        leaves: I,
-    ) -> PmtreeResult<()> {
-        self.batch_insert(
-            Some(start),
-            leaves.into_iter().collect::<Vec<_>>().as_slice(),
-        )
+    pub fn set_range(&mut self, start: usize, leaves: &[H::Fr]) -> PmtreeResult<()> {
+        self.batch_insert(Some(start), leaves)
     }
 
     /// Batch insertion of contiguous leaves from `start`, updated in parallel and committed atomically.
@@ -343,7 +337,7 @@ where
         let root_val = Self::batch_recalculate(root_key, Arc::clone(&subtree), self.depth)?;
 
         let mut batch = subtree
-            .read()?
+            .read()
             .iter()
             .map(|(key, value)| Ok(((*key).into(), H::serialize(*value)?)))
             .collect::<PmtreeResult<HashMap<DBKey, Value>>>()?;
@@ -408,10 +402,10 @@ where
         let left_child = Key(key.0 + 1, key.1 * 2);
         let right_child = Key(key.0 + 1, key.1 * 2 + 1);
 
-        let is_leaf = key.0 == depth || !subtree.read()?.contains_key(&left_child);
+        let is_leaf = key.0 == depth || !subtree.read().contains_key(&left_child);
         if is_leaf {
             return subtree
-                .read()?
+                .read()
                 .get(&key)
                 .copied()
                 .ok_or(PmtreeError::Corrupted);
@@ -431,7 +425,7 @@ where
 
         let result = H::hash_pair(left?, right?);
 
-        subtree.write()?.insert(key, result);
+        subtree.write().insert(key, result);
 
         Ok(result)
     }
