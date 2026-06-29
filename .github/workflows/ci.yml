@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - "**.md"
   pull_request:
@@ -28,10 +28,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
-      - name: Build
+      - name: Build default
         run: cargo build --release
-      - name: Test
+      - name: Test default
         run: cargo test --release
+      - name: Build parallel
+        run: cargo build --release --features parallel
+      - name: Test parallel
+        run: cargo test --release --features parallel
 
   fmt:
     name: Format
@@ -65,4 +69,4 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Check clippy
-        run: cargo clippy --all-targets --release -- -D warnings
+        run: cargo clippy --all-targets --all-features --release -- -D warnings
