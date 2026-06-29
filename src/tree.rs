@@ -81,11 +81,11 @@ where
         }
         let root = cache[0];
 
-        // Commit only the two header keys, atomically.
+        // Commit the two header keys atomically.
         let next_index = 0usize;
         db.put_batch(HashMap::from([
-            (DEPTH_KEY, depth.to_be_bytes().to_vec()),
-            (NEXT_INDEX_KEY, next_index.to_be_bytes().to_vec()),
+            (DEPTH_KEY, (depth as u64).to_be_bytes().to_vec()),
+            (NEXT_INDEX_KEY, (next_index as u64).to_be_bytes().to_vec()),
         ]))?;
 
         Ok(Self {
@@ -104,7 +104,7 @@ where
 
         // Load depth & next_index, missing one means the tree is corrupted.
         let depth = match db.get(DEPTH_KEY)? {
-            Some(depth) => usize::from_be_bytes(depth.as_slice().try_into()?),
+            Some(depth) => u64::from_be_bytes(depth.as_slice().try_into()?) as usize,
             None => return Err(PmtreeError::Corrupted),
         };
 
@@ -114,7 +114,7 @@ where
         }
 
         let next_index = match db.get(NEXT_INDEX_KEY)? {
-            Some(next_index) => usize::from_be_bytes(next_index.as_slice().try_into()?),
+            Some(next_index) => u64::from_be_bytes(next_index.as_slice().try_into()?) as usize,
             None => return Err(PmtreeError::Corrupted),
         };
 
@@ -338,7 +338,10 @@ where
             .collect::<PmtreeResult<HashMap<DBKey, Value>>>()?;
 
         if new_next_index != self.next_index {
-            batch.insert(NEXT_INDEX_KEY, new_next_index.to_be_bytes().to_vec());
+            batch.insert(
+                NEXT_INDEX_KEY,
+                (new_next_index as u64).to_be_bytes().to_vec(),
+            );
         }
 
         self.db.put_batch(batch)?;
