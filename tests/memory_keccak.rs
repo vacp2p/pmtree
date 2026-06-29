@@ -189,3 +189,26 @@ fn batch_set_empty_is_noop() -> PmtreeResult<()> {
     assert_eq!(mt.leaves_set(), 0);
     Ok(())
 }
+
+#[test]
+fn batch_insert_rejects_overflow_and_capacity() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    let leaf = hex!("0000000000000000000000000000000000000000000000000000000000000001");
+
+    // `start + len` wraps `usize` → rejected via `checked_add`, not silently wrapped.
+    assert!(matches!(
+        mt.batch_insert(Some(usize::MAX), &[leaf, leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    // `start` within `usize` but past capacity (4) → rejected.
+    assert!(matches!(
+        mt.batch_insert(Some(4), &[leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    mt.batch_insert(Some(0), &[leaf, leaf, leaf, leaf])?;
+    assert_eq!(mt.leaves_set(), 4);
+
+    Ok(())
+}

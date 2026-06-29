@@ -25,7 +25,8 @@ const MAX_DEPTH: usize = 31;
 pub struct Key(usize, usize);
 impl From<Key> for DBKey {
     fn from(key: Key) -> Self {
-        let cantor_pairing = ((key.0 + key.1) * (key.0 + key.1 + 1) / 2 + key.1) as u64;
+        let s = key.0 as u64 + key.1 as u64;
+        let cantor_pairing = s * (s + 1) / 2 + key.1 as u64;
         cantor_pairing.to_be_bytes()
     }
 }
@@ -73,27 +74,19 @@ where
         // Create new db instance
         let mut db = D::new(db_config)?;
 
-        // Insert depth val into db
-        let depth_val = depth.to_be_bytes().to_vec();
-        db.put(DEPTH_KEY, depth_val)?;
-
-        // Insert next_index val into db
-        let next_index = 0usize;
-        let next_index_val = next_index.to_be_bytes().to_vec();
-        db.put(NEXT_INDEX_KEY, next_index_val)?;
-
-        // Cache nodes
+        // Per-level empty-subtree defaults, in memory only; `get_elem` falls back here, so they aren't persisted.
         let mut cache = vec![H::default_leaf(); depth + 1];
-
-        // Initialize one branch of the `Merkle Tree` from bottom to top
-        cache[depth] = H::default_leaf();
-        db.put(Key(depth, 0).into(), H::serialize(cache[depth])?)?;
         for i in (0..depth).rev() {
             cache[i] = H::hash_pair(cache[i + 1], cache[i + 1]);
-            db.put(Key(i, 0).into(), H::serialize(cache[i])?)?;
         }
-
         let root = cache[0];
+
+        // Commit only the two header keys, atomically.
+        let next_index = 0usize;
+        db.put_batch(HashMap::from([
+            (DEPTH_KEY, depth.to_be_bytes().to_vec()),
+            (NEXT_INDEX_KEY, next_index.to_be_bytes().to_vec()),
+        ]))?;
 
         Ok(Self {
             db,
@@ -262,7 +255,9 @@ where
         }
 
         let start = start.unwrap_or(self.next_index);
-        let end = start + leaves.len();
+        let end = start
+            .checked_add(leaves.len())
+            .ok_or(PmtreeError::TreeIsFull)?;
 
         if end > self.capacity() {
             return Err(PmtreeError::TreeIsFull);

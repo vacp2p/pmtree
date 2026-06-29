@@ -256,3 +256,33 @@ fn batch_set_empty_is_noop() -> PmtreeResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn batch_insert_rejects_overflow_and_capacity() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MySled, MyKeccak>::new(
+        2,
+        SledConfig {
+            path: String::from("batch_insert_rejects_overflow_and_capacity"),
+        },
+    )?;
+    let leaf = hex!("0000000000000000000000000000000000000000000000000000000000000001");
+
+    // `start + len` wraps `usize` → rejected via `checked_add`, not silently wrapped.
+    assert!(matches!(
+        mt.batch_insert(Some(usize::MAX), &[leaf, leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    // `start` within `usize` but past capacity (4) → rejected.
+    assert!(matches!(
+        mt.batch_insert(Some(4), &[leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    mt.batch_insert(Some(0), &[leaf, leaf, leaf, leaf])?;
+    assert_eq!(mt.leaves_set(), 4);
+
+    fs::remove_dir_all("batch_insert_rejects_overflow_and_capacity").expect("Error removing db");
+
+    Ok(())
+}

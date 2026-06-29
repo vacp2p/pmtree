@@ -4,7 +4,7 @@ use crate::{PmtreeResult, Value};
 
 /// Trait that must be implemented for the hash function.
 pub trait Hasher {
-    /// Native type for the hash function.
+    /// Native type for a leaf and tree node.
     type Fr: Copy + Eq + Default + Sync + Send + Debug;
 
     /// Serializes an `Fr` into its stored [`Value`].
@@ -18,6 +18,6 @@ pub trait Hasher {
         Self::Fr::default()
     }
 
-    /// Hashes a pair of nodes into their parent.
+    /// Combines two child nodes into their parent.
     fn hash_pair(left: Self::Fr, right: Self::Fr) -> Self::Fr;
 }
