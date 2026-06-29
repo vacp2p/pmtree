@@ -286,3 +286,33 @@ fn batch_insert_rejects_overflow_and_capacity() -> PmtreeResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn proof_verify_unset_leaf() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MySled, MyKeccak>::new(
+        2,
+        SledConfig {
+            path: String::from("proof_verify_unset_leaf"),
+        },
+    )?;
+    let default = MyKeccak::default_leaf();
+
+    // An unset leaf reads back as the default leaf, and its proof verifies against it.
+    assert_eq!(mt.get(0)?, default);
+    let proof = mt.proof(0)?;
+    assert!(mt.verify(&default, &proof));
+
+    // A non-default value does not verify against the unset-leaf proof.
+    let other = hex!("0000000000000000000000000000000000000000000000000000000000000007");
+    assert!(!mt.verify(&other, &proof));
+
+    // After setting a sibling, the (still unset) leaf 0 proof tracks the new root.
+    mt.set(1, other)?;
+    let proof = mt.proof(0)?;
+    assert!(mt.verify(&default, &proof));
+    assert_eq!(mt.get(0)?, default);
+
+    fs::remove_dir_all("proof_verify_unset_leaf").expect("Error removing db");
+
+    Ok(())
+}

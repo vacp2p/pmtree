@@ -26,7 +26,7 @@ pub trait Database {
     /// Puts `value` at `key`.
     fn put(&mut self, key: DBKey, value: Value) -> PmtreeResult<()>;
 
-    /// Puts a batch of [`DBKey`]/[`Value`] entries into the database.
+    /// Atomically puts a batch of [`DBKey`]/[`Value`] entries into the database.
     fn put_batch(&mut self, subtree: HashMap<DBKey, Value>) -> PmtreeResult<()>;
 
     /// Closes the database connection.
