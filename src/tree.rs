@@ -16,8 +16,9 @@ const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
 // db[NEXT_INDEX_KEY] = next_index;
 const NEXT_INDEX_KEY: DBKey = u64::MAX.to_be_bytes();
 
-/// `[From<Key>` encodes `(depth, index)` into a `u64` using Cantor pairing `(s * (s + 1)) / 2 + index`.
-/// The formula grows quadratically with `s = depth + index`, so depth is capped at 31 to avoid overflow.
+/// `From<Key>` computes `((s * (s + 1)) / 2) + index`, where `s = depth + index`.
+///
+/// At `MAX_DEPTH = 31`, the worst case is `s = 31 + (2^31 - 1)`, so `s * (s + 1)` still fits in `u64`.
 const MAX_DEPTH: usize = 31;
 
 // Denotes keys (depth, index) in Merkle Tree. Can be converted to DBKey
