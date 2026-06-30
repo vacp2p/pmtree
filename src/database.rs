@@ -1,31 +1,34 @@
-use crate::*;
-
 use std::collections::HashMap;
 
-/// Trait that must be implemented for a Database
+use crate::{DBKey, PmtreeResult, Value};
+
+/// Storage backend that persists the [`MerkleTree`](crate::MerkleTree)'s nodes.
+///
+/// Each tree is parameterized over a `Database`; it is the durable key/value store
+/// holding every serialized node plus the tree's depth and next index.
 pub trait Database {
-    /// Config for database. Default is necessary for a default() pmtree function
+    /// Configuration for the database; its `Default` backs [`MerkleTree::default`](crate::MerkleTree::default).
     type Config: Default;
 
-    /// Creates new instance of db
+    /// Creates a new database instance.
     fn new(config: Self::Config) -> PmtreeResult<Self>
     where
         Self: Sized;
 
-    /// Loades existing db (existence check required)
+    /// Loads an existing database (existence check required).
     fn load(config: Self::Config) -> PmtreeResult<Self>
     where
         Self: Sized;
 
-    /// Returns value from db by the key
+    /// Returns the [`Value`] stored at `key`.
     fn get(&self, key: DBKey) -> PmtreeResult<Option<Value>>;
 
-    /// Puts the value to the db by the key
+    /// Puts `value` at `key`.
     fn put(&mut self, key: DBKey, value: Value) -> PmtreeResult<()>;
 
-    /// Puts the leaves batch to the db
+    /// Atomically puts a batch of [`DBKey`]/[`Value`] entries into the database.
     fn put_batch(&mut self, subtree: HashMap<DBKey, Value>) -> PmtreeResult<()>;
 
-    /// Closes the db connection
+    /// Closes the database connection.
     fn close(&mut self) -> PmtreeResult<()>;
 }

@@ -1,23 +1,23 @@
-use crate::*;
-
 use std::fmt::Debug;
 
-/// Trait that must be implemented for Hash Function
+use crate::{PmtreeResult, Value};
+
+/// Trait that must be implemented for the hash function.
 pub trait Hasher {
-    /// Native type for the hash-function
+    /// Native type for a leaf and tree node.
     type Fr: Copy + Eq + Default + Sync + Send + Debug;
 
-    /// Serializes Self::Fr
-    fn serialize(value: Self::Fr) -> Value;
+    /// Serializes an `Fr` into its stored [`Value`].
+    fn serialize(value: Self::Fr) -> PmtreeResult<Value>;
 
-    /// Deserializes Self::Fr
-    fn deserialize(value: Value) -> Self::Fr;
+    /// Deserializes an `Fr` from its stored bytes.
+    fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr>;
 
-    /// Outputs the default leaf (Fr::default())
+    /// Outputs the default leaf (`Fr::default()`).
     fn default_leaf() -> Self::Fr {
         Self::Fr::default()
     }
 
-    /// Calculates hash-function
-    fn hash(input: &[Self::Fr]) -> Self::Fr;
+    /// Combines two child nodes into their parent.
+    fn hash_pair(left: Self::Fr, right: Self::Fr) -> Self::Fr;
 }

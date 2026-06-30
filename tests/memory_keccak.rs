@@ -1,7 +1,8 @@
-use hex_literal::hex;
 use std::collections::HashMap;
+
+use hex_literal::hex;
 use tiny_keccak::{Hasher as _, Keccak};
-use vacp2p_pmtree::*;
+use vacp2p_pmtree::{DBKey, Database, Hasher, MerkleTree, PmtreeError, PmtreeResult, Value};
 
 struct MemoryDB(HashMap<DBKey, Value>);
 struct MyKeccak;
@@ -17,9 +18,7 @@ impl Database for MemoryDB {
     }
 
     fn load(_db_config: MemoryDBConfig) -> PmtreeResult<Self> {
-        Err(PmtreeErrorKind::DatabaseError(
-            DatabaseErrorKind::CannotLoadDatabase,
-        ))
+        Err(PmtreeError::Database("Cannot load database".to_string()))
     }
 
     fn get(&self, key: DBKey) -> PmtreeResult<Option<Value>> {
@@ -46,24 +45,23 @@ impl Database for MemoryDB {
 impl Hasher for MyKeccak {
     type Fr = [u8; 32];
 
+    fn serialize(value: Self::Fr) -> PmtreeResult<Value> {
+        Ok(value.to_vec())
+    }
+
+    fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr> {
+        Ok(bytes.try_into()?)
+    }
+
     fn default_leaf() -> Self::Fr {
         [0; 32]
     }
 
-    fn serialize(value: Self::Fr) -> Value {
-        value.to_vec()
-    }
-
-    fn deserialize(value: Value) -> Self::Fr {
-        value.try_into().unwrap()
-    }
-
-    fn hash(input: &[Self::Fr]) -> Self::Fr {
+    fn hash_pair(left: Self::Fr, right: Self::Fr) -> Self::Fr {
         let mut output = [0; 32];
         let mut hasher = Keccak::v256();
-        for element in input {
-            hasher.update(element);
-        }
+        hasher.update(&left);
+        hasher.update(&right);
         hasher.finalize(&mut output);
         output
     }
@@ -145,12 +143,95 @@ fn set_range() -> PmtreeResult<()> {
         hex!("0000000000000000000000000000000000000000000000000000000000000002"),
     ];
 
-    mt.set_range(2, leaves)?;
+    mt.set_range(2, &leaves)?;
 
     assert_eq!(
         mt.root(),
         hex!("1e9f6c8d3fd5b7ae3a29792adb094c6d4cc6149d0c81c8c8e57cf06c161a92b8")
     );
+
+    Ok(())
+}
+
+#[test]
+fn batch_set_matches_individual_sets() -> PmtreeResult<()> {
+    let leaves = [
+        hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+    ];
+
+    // Reference: set the scattered indices one at a time.
+    let mut reference = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    reference.set(0, leaves[0])?;
+    reference.set(2, leaves[1])?;
+    reference.set(3, leaves[2])?;
+
+    // Same leaves committed in a single scattered batch.
+    let mut batched = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    batched.batch_set(&[(0, leaves[0]), (2, leaves[1]), (3, leaves[2])])?;
+
+    assert_eq!(reference.root(), batched.root());
+    assert_eq!(reference.leaves_set(), batched.leaves_set());
+    for index in 0..4 {
+        assert_eq!(reference.get(index)?, batched.get(index)?, "leaf {index}");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn batch_set_empty_is_noop() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    let root_before = mt.root();
+    mt.batch_set(&[])?;
+    assert_eq!(mt.root(), root_before);
+    assert_eq!(mt.leaves_set(), 0);
+    Ok(())
+}
+
+#[test]
+fn batch_insert_rejects_overflow_and_capacity() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    let leaf = hex!("0000000000000000000000000000000000000000000000000000000000000001");
+
+    // `start + len` wraps `usize` → rejected via `checked_add`, not silently wrapped.
+    assert!(matches!(
+        mt.batch_insert(Some(usize::MAX), &[leaf, leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    // `start` within `usize` but past capacity (4) → rejected.
+    assert!(matches!(
+        mt.batch_insert(Some(4), &[leaf]),
+        Err(PmtreeError::TreeIsFull)
+    ));
+
+    mt.batch_insert(Some(0), &[leaf, leaf, leaf, leaf])?;
+    assert_eq!(mt.leaves_set(), 4);
+
+    Ok(())
+}
+
+#[test]
+fn proof_verify_unset_leaf() -> PmtreeResult<()> {
+    let mut mt = MerkleTree::<MemoryDB, MyKeccak>::new(2, MemoryDBConfig)?;
+    let default = MyKeccak::default_leaf();
+
+    // An unset leaf reads back as the default leaf, and its proof verifies against it.
+    assert_eq!(mt.get(0)?, default);
+    let proof = mt.proof(0)?;
+    assert!(mt.verify(&default, &proof));
+
+    // A non-default value does not verify against the unset-leaf proof.
+    let other = hex!("0000000000000000000000000000000000000000000000000000000000000007");
+    assert!(!mt.verify(&other, &proof));
+
+    // After setting a sibling, the (still unset) leaf 0 proof tracks the new root.
+    mt.set(1, other)?;
+    let proof = mt.proof(0)?;
+    assert!(mt.verify(&default, &proof));
+    assert_eq!(mt.get(0)?, default);
 
     Ok(())
 }
