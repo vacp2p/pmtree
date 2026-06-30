@@ -47,7 +47,7 @@ In-memory DB (`HashMap`) + Keccak hasher:
 use std::collections::HashMap;
 
 use tiny_keccak::{Hasher as _, Keccak};
-use vacp2p_pmtree::*;
+use vacp2p_pmtree::{DBKey, Database, Hasher, MerkleTree, PmtreeError, PmtreeResult, Value};
 
 struct MemoryDB(HashMap<DBKey, Value>);
 struct MyKeccak;

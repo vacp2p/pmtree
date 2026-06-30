@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs};
 
 use hex_literal::hex;
 use tiny_keccak::{Hasher as _, Keccak};
-use vacp2p_pmtree::*;
+use vacp2p_pmtree::{DBKey, Database, Hasher, MerkleTree, PmtreeError, PmtreeResult, Value};
 
 struct MyKeccak;
 struct MySled(sled::Db);

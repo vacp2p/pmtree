@@ -11,9 +11,9 @@ pub mod error;
 pub mod hasher;
 pub mod tree;
 
-pub use database::*;
-pub use error::*;
-pub use hasher::*;
+pub use database::Database;
+pub use error::{PmtreeError, PmtreeResult};
+pub use hasher::Hasher;
 pub use tree::MerkleTree;
 
 /// Denotes keys in a [`Database`].
