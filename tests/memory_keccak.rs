@@ -43,21 +43,21 @@ impl Database for MemoryDB {
 }
 
 impl Hasher for MyKeccak {
-    type Fr = [u8; 32];
+    type Scalar = [u8; 32];
 
-    fn serialize(value: Self::Fr) -> PmtreeResult<Value> {
+    fn serialize(value: Self::Scalar) -> PmtreeResult<Value> {
         Ok(value.to_vec())
     }
 
-    fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Fr> {
+    fn deserialize(bytes: &[u8]) -> PmtreeResult<Self::Scalar> {
         Ok(bytes.try_into()?)
     }
 
-    fn default_leaf() -> Self::Fr {
+    fn default_leaf() -> Self::Scalar {
         [0; 32]
     }
 
-    fn hash_pair(left: Self::Fr, right: Self::Fr) -> Self::Fr {
+    fn hash_pair(left: Self::Scalar, right: Self::Scalar) -> Self::Scalar {
         let mut output = [0; 32];
         let mut hasher = Keccak::v256();
         hasher.update(&left);
