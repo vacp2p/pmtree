@@ -14,7 +14,7 @@ pub mod tree;
 pub use database::Database;
 pub use error::{PmtreeError, PmtreeResult};
 pub use hasher::Hasher;
-pub use tree::MerkleTree;
+pub use tree::{MerkleTree, MAX_DEPTH};
 
 /// Denotes keys in a [`Database`].
 pub type DBKey = [u8; 8];

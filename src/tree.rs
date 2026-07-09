@@ -10,16 +10,16 @@ use rayon;
 
 use crate::{DBKey, Database, Hasher, PmtreeError, PmtreeResult, Value};
 
+/// `From<Key>` computes `((s * (s + 1)) / 2) + index`, where `s = depth + index`.
+///
+/// At `MAX_DEPTH = 31`, the worst case is `s = 31 + (2^31 - 1)`, so `s * (s + 1)` still fits in `u64`.
+pub const MAX_DEPTH: usize = 31;
+
 // db[DEPTH_KEY] = depth
 const DEPTH_KEY: DBKey = (u64::MAX - 1).to_be_bytes();
 
 // db[NEXT_INDEX_KEY] = next_index;
 const NEXT_INDEX_KEY: DBKey = u64::MAX.to_be_bytes();
-
-/// `From<Key>` computes `((s * (s + 1)) / 2) + index`, where `s = depth + index`.
-///
-/// At `MAX_DEPTH = 31`, the worst case is `s = 31 + (2^31 - 1)`, so `s * (s + 1)` still fits in `u64`.
-const MAX_DEPTH: usize = 31;
 
 // Denotes keys (depth, index) in Merkle Tree. Can be converted to DBKey
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,13 +47,13 @@ where
     pub db: D,
     depth: usize,
     next_index: usize,
-    cache: Vec<H::Fr>,
-    root: H::Fr,
+    cache: Vec<H::Scalar>,
+    root: H::Scalar,
 }
 
 /// The Merkle Proof structure.
 #[derive(Clone, PartialEq, Eq)]
-pub struct MerkleProof<H: Hasher>(pub Vec<(H::Fr, u8)>);
+pub struct MerkleProof<H: Hasher>(pub Vec<(H::Scalar, u8)>);
 
 impl<D, H> MerkleTree<D, H>
 where
@@ -161,12 +161,12 @@ where
     }
 
     /// Returns the root of the tree.
-    pub fn root(&self) -> H::Fr {
+    pub fn root(&self) -> H::Scalar {
         self.root
     }
 
     /// Returns the leaf at `key`.
-    pub fn get(&self, key: usize) -> PmtreeResult<H::Fr> {
+    pub fn get(&self, key: usize) -> PmtreeResult<H::Scalar> {
         if key >= self.capacity() {
             return Err(PmtreeError::IndexOutOfBounds);
         }
@@ -176,7 +176,7 @@ where
 
     /// Returns the subtree root at `level` on the path to leaf `index`
     /// (`level == 0` is the tree root, `level == depth` is the leaf itself).
-    pub fn subtree_root(&self, level: usize, index: usize) -> PmtreeResult<H::Fr> {
+    pub fn subtree_root(&self, level: usize, index: usize) -> PmtreeResult<H::Scalar> {
         if level > self.depth || index >= self.capacity() {
             return Err(PmtreeError::IndexOutOfBounds);
         }
@@ -210,14 +210,14 @@ where
     }
 
     /// Verifies a [`MerkleProof`] against `leaf` and the current tree root.
-    pub fn verify(&self, leaf: &H::Fr, witness: &MerkleProof<H>) -> bool {
+    pub fn verify(&self, leaf: &H::Scalar, witness: &MerkleProof<H>) -> bool {
         let expected_root = witness.compute_root_from(leaf);
 
         self.root() == expected_root
     }
 
     /// Sets the leaf at index `key`.
-    pub fn set(&mut self, key: usize, leaf: H::Fr) -> PmtreeResult<()> {
+    pub fn set(&mut self, key: usize, leaf: H::Scalar) -> PmtreeResult<()> {
         if key >= self.capacity() {
             return Err(PmtreeError::IndexOutOfBounds);
         }
@@ -227,7 +227,7 @@ where
     }
 
     /// Inserts `leaf` at the next available index.
-    pub fn update_next(&mut self, leaf: H::Fr) -> PmtreeResult<()> {
+    pub fn update_next(&mut self, leaf: H::Scalar) -> PmtreeResult<()> {
         self.set(self.next_index, leaf)?;
 
         Ok(())
@@ -245,12 +245,12 @@ where
     }
 
     /// Sets `leaves` contiguously from `start` via [`MerkleTree::batch_insert`].
-    pub fn set_range(&mut self, start: usize, leaves: &[H::Fr]) -> PmtreeResult<()> {
+    pub fn set_range(&mut self, start: usize, leaves: &[H::Scalar]) -> PmtreeResult<()> {
         self.batch_insert(Some(start), leaves)
     }
 
     /// Batch insertion of contiguous leaves from `start`, updated in parallel and committed atomically.
-    pub fn batch_insert(&mut self, start: Option<usize>, leaves: &[H::Fr]) -> PmtreeResult<()> {
+    pub fn batch_insert(&mut self, start: Option<usize>, leaves: &[H::Scalar]) -> PmtreeResult<()> {
         if leaves.is_empty() {
             return Ok(());
         }
@@ -265,7 +265,7 @@ where
         }
 
         let root_key = Key(0, 0);
-        let mut subtree = HashMap::<Key, H::Fr>::new();
+        let mut subtree = HashMap::<Key, H::Scalar>::new();
         subtree.insert(root_key, self.root);
         self.fill_nodes(root_key, start, end, &mut subtree, leaves, start)?;
 
@@ -273,7 +273,7 @@ where
     }
 
     /// Sets a batch of leaves at arbitrary, possibly non-contiguous, indices committed atomically.
-    pub fn batch_set(&mut self, pairs: &[(usize, H::Fr)]) -> PmtreeResult<()> {
+    pub fn batch_set(&mut self, pairs: &[(usize, H::Scalar)]) -> PmtreeResult<()> {
         if pairs.is_empty() {
             return Ok(());
         }
@@ -286,7 +286,7 @@ where
         }
 
         let root_key = Key(0, 0);
-        let mut subtree = HashMap::<Key, H::Fr>::new();
+        let mut subtree = HashMap::<Key, H::Scalar>::new();
         subtree.insert(root_key, self.root);
 
         // For each affected leaf, load every node on its path plus the off-path sibling, so
@@ -312,7 +312,7 @@ where
     }
 
     // Returns the node at `key`, falling back to the empty-subtree default for an unwritten node.
-    fn get_elem(&self, key: Key) -> PmtreeResult<H::Fr> {
+    fn get_elem(&self, key: Key) -> PmtreeResult<H::Scalar> {
         let res = match self.db.get(key.into())? {
             Some(value) => H::deserialize(&value)?,
             None => self.cache[key.0],
@@ -325,7 +325,7 @@ where
     // single atomic put_batch (so a crash mid-write cannot leave the tree partially updated)
     fn commit_subtree(
         &mut self,
-        subtree: HashMap<Key, H::Fr>,
+        subtree: HashMap<Key, H::Scalar>,
         new_next_index: usize,
     ) -> PmtreeResult<()> {
         let root_key = Key(0, 0);
@@ -359,8 +359,8 @@ where
         key: Key,
         start: usize,
         end: usize,
-        subtree: &mut HashMap<Key, H::Fr>,
-        leaves: &[H::Fr],
+        subtree: &mut HashMap<Key, H::Scalar>,
+        leaves: &[H::Scalar],
         from: usize,
     ) -> PmtreeResult<()> {
         if key.0 == self.depth {
@@ -395,9 +395,9 @@ where
     // Recalculates tree in parallel (in-memory)
     fn batch_recalculate(
         key: Key,
-        subtree: Arc<RwLock<HashMap<Key, H::Fr>>>,
+        subtree: Arc<RwLock<HashMap<Key, H::Scalar>>>,
         depth: usize,
-    ) -> PmtreeResult<H::Fr> {
+    ) -> PmtreeResult<H::Scalar> {
         let left_child = Key(key.0 + 1, key.1 * 2);
         let right_child = Key(key.0 + 1, key.1 * 2 + 1);
 
@@ -432,7 +432,7 @@ where
 
 impl<H: Hasher> MerkleProof<H> {
     /// Computes the Merkle root by hashing `leaf` up through the [`MerkleProof`].
-    pub fn compute_root_from(&self, leaf: &H::Fr) -> H::Fr {
+    pub fn compute_root_from(&self, leaf: &H::Scalar) -> H::Scalar {
         let mut acc = *leaf;
         for w in self.0.iter() {
             if w.1 == 0 {
@@ -459,7 +459,7 @@ impl<H: Hasher> MerkleProof<H> {
     }
 
     /// Returns the path elements forming the [`MerkleProof`].
-    pub fn get_path_elements(&self) -> Vec<H::Fr> {
+    pub fn get_path_elements(&self) -> Vec<H::Scalar> {
         self.0.iter().map(|x| x.0).collect()
     }
 
